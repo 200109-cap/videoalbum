@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a84ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="视频相册">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMGE4NGZmIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNWU1Y2U2Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTIiIGZpbGw9InVybCgjZykiLz48cmVjdCB4PSIxMjAiIHk9IjE1MCIgd2lkdGg9IjI3MiIgaGVpZ2h0PSIyMTIiIHJ4PSIyOCIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC45NSIvPjxwYXRoIGQ9Ik0yMzIgMjEwIEwzMjAgMjU2IEwyMzIgMzAyIFoiIGZpbGw9IiMwYTg0ZmYiLz48L3N2Zz4=" type="image/svg+xml">
+<title>视频相册 · 私人云端</title>
+<style>
+  :root{
+    --bg:#f2f2f7; --card:#ffffff; --text:#1c1c1e; --sub:#8e8e93;
+    --blue:#0a84ff; --red:#ff3b30; --line:#e5e5ea; --blur:rgba(242,242,247,.82);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased; overscroll-behavior:none;}
+  body{max-width:560px; margin:0 auto; min-height:100vh; position:relative;
+    padding-bottom:env(safe-area-inset-bottom);}
+
+  header{position:sticky; top:0; z-index:30; backdrop-filter:saturate(180%) blur(20px);
+    background:var(--blur); border-bottom:.5px solid var(--line);
+    padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;}
+  .title-row{display:flex; align-items:center; justify-content:space-between;}
+  h1{font-size:26px; font-weight:700; margin:0; letter-spacing:.3px;}
+  .storage{font-size:12px; color:var(--sub); margin-top:2px;}
+  .storage b{color:var(--text); font-weight:600;}
+  .ic-btn{width:38px; height:38px; border:none; background:transparent; color:var(--blue);
+    font-size:22px; border-radius:50%; display:flex; align-items:center; justify-content:center;}
+  .ic-btn:active{background:rgba(0,0,0,.06);}
+
+  .toolbar{position:sticky; top:calc(env(safe-area-inset-top) + 58px); z-index:29;
+    background:var(--blur); backdrop-filter:saturate(180%) blur(20px);
+    display:flex; gap:8px; padding:8px 12px; border-bottom:.5px solid var(--line);
+    overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .toolbar::-webkit-scrollbar{display:none;}
+  .btn{border:none; border-radius:20px; padding:9px 14px; font-size:14px; font-weight:600;
+    background:rgba(120,120,128,.12); color:var(--text); white-space:nowrap; display:flex;
+    align-items:center; gap:6px;}
+  .btn:active{transform:scale(.96);}
+  .btn.primary{background:var(--blue); color:#fff;}
+  .btn.warn{background:var(--red); color:#fff;}
+  .btn[disabled]{opacity:.4;}
+  .btn svg{width:16px; height:16px;}
+
+  main{padding:6px 6px 90px;}
+  .group-h{font-size:13px; font-weight:700; color:var(--sub); margin:14px 8px 6px;
+    text-transform:uppercase; letter-spacing:.5px;}
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:3px;}
+  .cell{position:relative; aspect-ratio:1/1; border-radius:4px; overflow:hidden;
+    background:#d1d1d6; cursor:pointer;}
+  .cell img{width:100%; height:100%; object-fit:cover; display:block;}
+  .cell .dur{position:absolute; right:4px; bottom:4px; background:rgba(0,0,0,.55);
+    color:#fff; font-size:11px; padding:1px 5px; border-radius:8px; font-variant-numeric:tabular-nums;}
+  .cell .pick{position:absolute; left:6px; top:6px; width:22px; height:22px; border-radius:50%;
+    border:2px solid #fff; background:rgba(0,0,0,.25); display:flex; align-items:center;
+    justify-content:center; color:#fff; font-size:13px; font-weight:700;}
+  .cell.sel{outline:3px solid var(--blue); outline-offset:-3px;}
+  .cell.sel .pick{background:var(--blue);}
+  .cell .del{position:absolute; right:4px; top:4px; width:22px; height:22px; border-radius:50%;
+    background:rgba(0,0,0,.5); color:#fff; border:none; font-size:14px; display:none;
+    align-items:center; justify-content:center;}
+  .cell:hover .del{display:flex;}
+
+  .empty{text-align:center; color:var(--sub); padding:80px 24px;}
+  .empty .big{font-size:54px; margin-bottom:12px;}
+  .empty p{font-size:15px; line-height:1.6; margin:6px 0;}
+
+  .selbar{position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 14px); z-index:40;
+    background:rgba(28,28,30,.92); color:#fff; border-radius:24px; padding:8px 8px 8px 18px;
+    display:none; align-items:center; gap:10px; backdrop-filter:blur(20px);
+    box-shadow:0 8px 30px rgba(0,0,0,.3); max-width:94%;}
+  .selbar.show{display:flex;}
+  .selbar .cnt{font-size:14px; font-weight:600;}
+  .selbar .btn{padding:8px 12px;}
+
+  .modal{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.92);
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+  .modal.show{display:flex;}
+  .modal video{max-width:100%; max-height:72vh; border-radius:8px; background:#000;}
+  .modal .mtitle{color:#fff; font-size:14px; margin:12px 16px 4px; max-width:90%;
+    text-align:center; word-break:break-all;}
+  .modal .mactions{display:flex; gap:12px; margin-top:14px;}
+  .modal .mactions .btn{background:rgba(255,255,255,.16); color:#fff; border-radius:22px;}
+  .modal .close{position:absolute; top:calc(env(safe-area-inset-top) + 14px); right:16px;
+    color:#fff; font-size:30px; background:none; border:none;}
+
+  .sheet{position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.4);
+    display:none; align-items:flex-end; justify-content:center;}
+  .sheet.show{display:flex;}
+  .sheet .panel{background:#fff; width:100%; max-width:560px; border-radius:16px 16px 0 0;
+    padding:8px 0 calc(env(safe-area-inset-bottom) + 8px); animation:up .25s ease;}
+  @keyframes up{from{transform:translateY(100%);}to{transform:translateY(0);}}
+  .sheet .ph{text-align:center; font-size:13px; color:var(--sub); padding:10px;}
+  .row{display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
+    border-top:.5px solid var(--line); font-size:16px;}
+  .row small{display:block; color:var(--sub); font-size:12px; margin-top:3px; max-width:78%;}
+  .url-in{width:130px; font-size:14px; padding:7px 9px; border:1px solid var(--line);
+    border-radius:8px; text-align:right; outline:none;}
+  .url-in:focus{border-color:var(--blue);}
+  .switch{position:relative; width:50px; height:30px; flex:0 0 auto;}
+  .switch input{display:none;}
+  .switch .tk{position:absolute; inset:0; background:#e9e9ea; border-radius:15px; transition:.2s;}
+  .switch .tk::after{content:""; position:absolute; width:26px; height:26px; border-radius:50%;
+    background:#fff; top:2px; left:2px; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:.2s;}
+  .switch input:checked + .tk{background:var(--blue);}
+  .switch input:checked + .tk::after{transform:translateX(20px);}
+  .row.danger{color:var(--red);}
+  .sheet .cancel{margin:8px 14px 4px; border:none; background:var(--card); border-radius:12px;
+    width:calc(100% - 28px); padding:14px; font-size:17px; font-weight:600; color:var(--blue);}
+
+  .prog{position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.55); backdrop-filter:blur(4px);
+    display:none; align-items:center; justify-content:center;}
+  .prog.show{display:flex;}
+  .prog .box{background:#fff; border-radius:16px; padding:22px 24px; width:78%; max-width:300px;
+    text-align:center;}
+  .prog .ptitle{font-size:16px; font-weight:600; margin-bottom:14px;}
+  .prog .bar{height:8px; background:#e9e9ea; border-radius:5px; overflow:hidden;}
+  .prog .fill{height:100%; width:0%; background:var(--blue); transition:width .2s;}
+  .prog .pct{font-size:13px; color:var(--sub); margin-top:10px; font-variant-numeric:tabular-nums;}
+
+  .toast{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:80;
+    background:rgba(0,0,0,.82); color:#fff; padding:12px 18px; border-radius:12px; font-size:14px;
+    display:none; max-width:80%; text-align:center;}
+  .toast.show{display:block; animation:fade .2s ease;}
+  @keyframes fade{from{opacity:0;}to{opacity:1;}}
+
+  .mode-tag{display:inline-block; font-size:11px; padding:1px 7px; border-radius:8px;
+    background:rgba(10,132,255,.14); color:var(--blue); font-weight:600; margin-left:8px; vertical-align:middle;}
+  .hide{display:none !important;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <div>
+      <h1>视频相册<span class="mode-tag" id="modeTag">本地</span></h1>
+      <div class="storage" id="storage">已用 <b>0 B</b> · <b>0</b> 个视频</div>
+    </div>
+    <button class="ic-btn" id="settingsBtn" aria-label="设置">⚙</button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button class="btn primary" id="uploadBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+    上传
+  </button>
+  <button class="btn" id="rand30">随机 30</button>
+  <button class="btn" id="rand40">随机 40</button>
+  <button class="btn" id="rand50">随机 50</button>
+  <button class="btn" id="randN">自选 N</button>
+  <button class="btn" id="installBtn" style="display:none">装到桌面</button>
+  <input type="file" id="fileInput" accept="video/*" multiple class="hide">
+</div>
+
+<main id="main">
+  <div class="empty" id="empty">
+    <div class="big">🎞️</div>
+    <p><b>还没有视频</b></p>
+    <p>点上方「上传」添加 1 分钟内的视频<br>视频会安全保存，删了手机里的也不丢</p>
+  </div>
+  <div id="gallery"></div>
+</main>
+
+<div class="selbar" id="selbar">
+  <span class="cnt" id="selCnt">已选 0</span>
+  <button class="btn primary" id="dlSel">下载</button>
+  <button class="btn warn" id="delSel">删除</button>
+  <button class="btn" id="clearSel">取消</button>
+</div>
+
+<div class="modal" id="modal">
+  <button class="close" id="modalClose">×</button>
+  <video id="modalVideo" controls playsinline></video>
+  <div class="mtitle" id="modalTitle"></div>
+  <div class="mactions">
+    <button class="btn" id="modalDl">保存到相册</button>
+    <button class="btn" id="modalDel">删除</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="panel">
+    <div class="ph">设置</div>
+    <div class="row">
+      <div>云端同步模式
+        <small>关闭=仅存此浏览器（可双击打开）；开启=上传到服务器，任意设备打开都有（需后端运行中）</small>
+      </div>
+      <label class="switch"><input type="checkbox" id="cloudMode"><span class="tk"></span></label>
+    </div>
+    <div class="row">
+      <div>云端服务器地址
+        <small>同源部署留空；否则填完整地址，如 https://album.example.com</small>
+      </div>
+      <input class="url-in" id="cloudUrl" placeholder="同源留空" inputmode="url">
+    </div>
+    <div class="row">
+      <div>测试连接
+        <small>开启云端前先点此，确认服务器可达（绿勾才正常）</small>
+      </div>
+      <button class="btn" id="testConn">测试</button>
+    </div>
+    <div class="row">
+      <div>同日不重复随机抽取
+        <small>开启后：同一天内，除第一次随机外，本次随机不会与上一次选中的视频重复</small>
+      </div>
+      <label class="switch"><input type="checkbox" id="noRepeat"><span class="tk"></span></label>
+    </div>
+    <div class="row">
+      <div>安装到主屏幕 / 桌面
+        <small>把本应用像 App 一样放到桌面，点开即用（需在浏览器中打开）</small>
+      </div>
+      <button class="btn primary" id="installBtn2" style="border-radius:18px;">安装</button>
+    </div>
+    <div class="row">
+      <div>关于存储
+        <small>本地模式：视频存于当前浏览器本地空间（IndexedDB）。云端模式：视频存于服务器，多端同步。</small>
+      </div>
+    </div>
+    <div class="row danger" id="clearAll">
+      <div>清空当前模式下全部视频</div>
+      <span>›</span>
+    </div>
+    <button class="cancel" id="sheetCancel">取消</button>
+  </div>
+</div>
+
+<div class="prog" id="prog">
+  <div class="box">
+    <div class="ptitle" id="progTitle">处理中</div>
+    <div class="bar"><div class="fill" id="progFill"></div></div>
+    <div class="pct" id="progPct">0%</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============ IndexedDB 持久层（本地模式 + 偏好设置） ============ */
+const DB_NAME="videoAlbumDB", DB_VERSION=1;
+let db=null;
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB_NAME,DB_VERSION);
+    r.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains("videos")){
+        const s=d.createObjectStore("videos",{keyPath:"id"});
+        s.createIndex("createdAt","createdAt");
+      }
+      if(!d.objectStoreNames.contains("meta")) d.createObjectStore("meta",{keyPath:"key"});
+    };
+    r.onsuccess=e=>{db=e.target.result; res(db);};
+    r.onerror=e=>rej(e.target.error);
+  });
+}
+function tx(store,mode){return db.transaction(store,mode).objectStore(store);}
+function putVideo(v){return new Promise((res,rej)=>{const r=tx("videos","readwrite").put(v);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
+function getAllVideos(){return new Promise((res,rej)=>{const r=tx("videos","readonly").getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});}
+function getVideo(id){return new Promise((res,rej)=>{const r=tx("videos","readonly").get(id);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+function delVideo(id){return new Promise((res,rej)=>{const r=tx("videos","readwrite").delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
+function getMeta(key){return new Promise((res,rej)=>{const r=tx("meta","readonly").get(key);r.onsuccess=()=>res(r.result?r.result.value:undefined);r.onerror=()=>rej(r.error);});}
+function setMeta(key,val){return new Promise((res,rej)=>{const r=tx("meta","readwrite").put({key,value:val});r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
+
+/* ============ 云端模式状态 ============ */
+let MODE="local";      // "local" | "cloud"
+let cloudBase="";      // 云端服务器 base，空=同源
+function apiBase(){
+  let b=(cloudBase||"").trim().replace(/\/+$/,"");
+  return b;
+}
+async function apiList(){ const r=await fetch(apiBase()+"/api/videos"); if(!r.ok)throw 0; return r.json(); }
+async function apiStorage(){ const r=await fetch(apiBase()+"/api/storage"); if(!r.ok)throw 0; return r.json(); }
+async function apiPutVideo(rec,file){
+  const qs=new URLSearchParams({name:rec.name,duration:String(rec.duration),type:rec.type,size:String(file.size)});
+  const r=await fetch(apiBase()+"/api/video/"+rec.id+"?"+qs.toString(),{method:"PUT",body:file});
+  if(!r.ok)throw 0;
+}
+async function apiPutThumb(id,blob){
+  const r=await fetch(apiBase()+"/api/thumb/"+id,{method:"PUT",body:blob});
+  if(!r.ok)throw 0;
+}
+async function apiDelete(id){
+  const r=await fetch(apiBase()+"/api/video/"+id,{method:"DELETE"});
+  if(!r.ok)throw 0;
+}
+function cloudVideoURL(id){ return apiBase()+"/api/video/"+id; }
+function cloudThumbURL(id){ return apiBase()+"/api/thumb/"+id; }
+/* 测试云端服务器是否可达，返回 true 或错误说明字符串 */
+async function testConnection(){
+  if(location.protocol==="file:") return "请通过浏览器访问 http://服务器地址:8080，不能直接双击本文件";
+  try{
+    const r=await fetch(apiBase()+"/api/health",{cache:"no-store"});
+    if(!r.ok) return "服务器返回 HTTP "+r.status;
+    return true;
+  }catch(e){ return (e&&e.message)||"无法连接（服务器未启动 / 地址错误 / 网络被拦截）"; }
+}
+
+/* ============ 工具函数 ============ */
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const MAX_DUR=60; // 秒
+function genId(){ return (crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(16).slice(2)); }
+function defName(){ return "video-"+new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")+".mp4"; }
+function fmtSize(b){
+  if(b<1024)return b+" B";
+  if(b<1048576)return (b/1024).toFixed(1)+" KB";
+  if(b<1073741824)return (b/1048576).toFixed(1)+" MB";
+  return (b/1073741824).toFixed(2)+" GB";
+}
+function todayStr(){return new Date().toISOString().slice(0,10);}
+let toastTimer=null;
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2200);
+}
+function getVideoDuration(file){
+  return new Promise(res=>{
+    const v=document.createElement("video"); v.preload="metadata"; v.muted=true;
+    v.onloadedmetadata=()=>{res(v.duration); URL.revokeObjectURL(v.src);};
+    v.onerror=()=>{res(NaN); URL.revokeObjectURL(v.src);};
+    v.src=URL.createObjectURL(file);
+  });
+}
+function makeThumb(file){
+  return new Promise(res=>{
+    const v=document.createElement("video"); v.preload="metadata"; v.muted=true;
+    v.src=URL.createObjectURL(file);
+    v.onloadeddata=()=>{
+      setTimeout(()=>{
+        try{
+          const ratio=(v.videoHeight&&v.videoWidth)?v.videoHeight/v.videoWidth:0.75;
+          const w=360,h=Math.round(w*ratio);
+          const c=document.createElement("canvas"); c.width=w; c.height=h;
+          c.getContext("2d").drawImage(v,0,0,w,h);
+          c.toBlob(b=>{URL.revokeObjectURL(v.src); res(b);},"image/jpeg",0.72);
+        }catch(e){URL.revokeObjectURL(v.src); res(null);}
+      },250);
+    };
+    v.onerror=()=>{URL.revokeObjectURL(v.src); res(null);};
+  });
+}
+
+/* ============ 状态 ============ */
+let videos=[];           // 当前列表（本地含 blob/thumb；云端仅 meta）
+let selected=new Set();  // 选中的 id
+const urlCache=new Map();// 本地模式缩略图 objectURL 缓存
+function thumbURL(rec){
+  if(MODE==="cloud") return cloudThumbURL(rec.id);
+  if(!urlCache.has(rec.id)) urlCache.set(rec.id, rec.thumb?URL.createObjectURL(rec.thumb):"");
+  return urlCache.get(rec.id);
+}
+function clearUrlCache(){ urlCache.forEach(u=>{if(u)URL.revokeObjectURL(u);}); urlCache.clear(); }
+async function getRec(id){
+  if(MODE==="cloud") return videos.find(v=>v.id===id);
+  return await getVideo(id);
+}
+
+/* ============ 渲染 ============ */
+async function refresh(){
+  if(MODE==="cloud"){
+    if(location.protocol==="file:"){
+      toast("云端模式需通过浏览器访问服务器（如 http://电脑IP:8080），不能直接双击打开本文件");
+      videos=[];
+    }else{
+      try{ videos=await apiList(); }
+      catch(e){ toast("云端连接失败：请确认服务器已启动、地址正确"); videos=[]; }
+    }
+  }else{
+    videos=await getAllVideos();
+  }
+  videos.sort((a,b)=>b.createdAt-a.createdAt);
+  await updateStorage();
+  renderGallery();
+  updateSelbar();
+}
+async function updateStorage(){
+  if(MODE==="cloud"){
+    let s={usedBytes:0,count:0};
+    try{ s=await apiStorage(); }catch(e){}
+    $("storage").innerHTML=`已用 <b>${fmtSize(s.usedBytes)}</b> · <b>${s.count}</b> 个视频（云端）`;
+    return;
+  }
+  let total=0; videos.forEach(v=>{total+=v.size+(v.thumb?v.thumb.size:0);});
+  $("storage").innerHTML=`已用 <b>${fmtSize(total)}</b> · <b>${videos.length}</b> 个视频`;
+}
+function renderGallery(){
+  const g=$("gallery"); g.innerHTML="";
+  $("empty").classList.toggle("hide", videos.length>0);
+  const groups={};
+  videos.forEach(v=>{
+    const d=new Date(v.createdAt);
+    const key=`${d.getFullYear()}年${d.getMonth()+1}月`;
+    (groups[key]=groups[key]||[]).push(v);
+  });
+  Object.keys(groups).sort((a,b)=>b.localeCompare(a)).forEach(key=>{
+    const h=document.createElement("div"); h.className="group-h"; h.textContent=key;
+    g.appendChild(h);
+    const grid=document.createElement("div"); grid.className="grid";
+    groups[key].forEach(rec=>grid.appendChild(cell(rec)));
+    g.appendChild(grid);
+  });
+}
+function cell(rec){
+  const el=document.createElement("div");
+  el.className="cell"+(selected.has(rec.id)?" sel":"");
+  const url=thumbURL(rec);
+  el.innerHTML=`
+    ${url?`<img src="${url}" alt="">`:""}
+    <span class="dur">${fmtDur(rec.duration)}</span>
+    <span class="pick">${selected.has(rec.id)?"✓":""}</span>
+    <button class="del" data-del="${rec.id}" aria-label="删除">×</button>`;
+  el.addEventListener("click",e=>{
+    if(e.target.dataset.del){ e.stopPropagation(); deleteOne(rec.id); return; }
+    if(e.target.classList.contains("pick")){ toggleSelect(rec.id); return; }
+    if(selected.size>0){ toggleSelect(rec.id); }
+    else { openPreview(rec.id); }
+  });
+  return el;
+}
+function fmtDur(s){
+  if(!s||isNaN(s))return "";
+  s=Math.round(s); const m=Math.floor(s/60), sec=s%60;
+  return m+":"+String(sec).padStart(2,"0");
+}
+function toggleSelect(id){
+  if(selected.has(id))selected.delete(id); else selected.add(id);
+  renderGallery(); updateSelbar();
+}
+function updateSelbar(){
+  const bar=$("selbar");
+  if(selected.size>0){ bar.classList.add("show"); $("selCnt").textContent="已选 "+selected.size; }
+  else{ bar.classList.remove("show"); }
+}
+
+/* ============ 上传 ============ */
+$("uploadBtn").onclick=()=>$("fileInput").click();
+$("fileInput").onchange=async e=>{
+  const files=[...e.target.files].filter(f=>f.type.startsWith("video/"));
+  e.target.value="";
+  if(!files.length)return;
+  await ingest(files);
+};
+async function ingest(files){
+  showProg("上传中",0);
+  if(MODE==="cloud"){
+    let ok=0, skip=0;
+    for(let i=0;i<files.length;i++){
+      const f=files[i];
+      const dur=await getVideoDuration(f);
+      if(isNaN(dur)||dur>MAX_DUR){ skip++; if(dur>MAX_DUR) toast(`已跳过：${f.name}（超过1分钟）`); updateProg((i+1)/files.length); continue; }
+      const rec={ id:genId(), name:f.name||defName(), type:f.type||"video/mp4", size:f.size, duration:dur, createdAt:Date.now() };
+      try{
+        await apiPutVideo(rec,f);
+        const thumb=await makeThumb(f);
+        if(thumb) await apiPutThumb(rec.id,thumb);
+        ok++;
+      }catch(err){ toast("上传失败："+f.name); }
+      updateProg((i+1)/files.length);
+      await sleep(30);
+    }
+    hideProg();
+    if(skip>0) toast(`已添加 ${ok} 个，跳过 ${skip} 个（超长/无效）`);
+    else if(ok>0) toast(`已添加 ${ok} 个视频`);
+    await refresh();
+    return;
+  }
+  // 本地模式
+  let ok=0, skip=0;
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    const dur=await getVideoDuration(f);
+    if(isNaN(dur)){ skip++; updateProg((i+1)/files.length); continue; }
+    if(dur>MAX_DUR){ skip++; toast(`已跳过：${f.name}（超过1分钟）`); updateProg((i+1)/files.length); continue; }
+    const thumb=await makeThumb(f);
+    const rec={
+      id:genId(),
+      name:f.name||defName(),
+      type:f.type||"video/mp4", size:f.size, blob:f, thumb,
+      duration:dur, createdAt:Date.now()
+    };
+    await putVideo(rec);
+    ok++; updateProg((i+1)/files.length); await sleep(30);
+  }
+  hideProg();
+  if(skip>0) toast(`已添加 ${ok} 个，跳过 ${skip} 个（超长/无效）`);
+  else if(ok>0) toast(`已添加 ${ok} 个视频`);
+  await refresh();
+}
+
+/* ============ 预览 / 保存 / 删除 ============ */
+let curPreview=null;
+async function openPreview(id){
+  const rec=await getRec(id); if(!rec)return;
+  curPreview=id;
+  const v=$("modalVideo");
+  v.src = (MODE==="cloud") ? cloudVideoURL(id) : URL.createObjectURL(rec.blob);
+  v.load();
+  $("modalTitle").textContent=rec.name;
+  $("modal").classList.add("show");
+}
+$("modalClose").onclick=closePreview;
+function closePreview(){
+  $("modal").classList.remove("show");
+  const v=$("modalVideo"); if(v.src)URL.revokeObjectURL(v.src); v.removeAttribute("src"); v.load();
+  curPreview=null;
+}
+$("modalDl").onclick=()=>{ if(curPreview) saveVideo(curPreview); };
+$("modalDel").onclick=async()=>{ if(curPreview){ await deleteOne(curPreview); closePreview(); } };
+
+async function deleteOne(id){
+  if(MODE==="cloud"){ try{ await apiDelete(id); }catch(e){ toast("删除失败"); } }
+  else { await delVideo(id); clearUrlCache(); }
+  selected.delete(id);
+  await refresh();
+  toast("已删除");
+}
+$("delSel").onclick=async()=>{
+  if(!selected.size)return;
+  const ids=[...selected];
+  showProg("删除中",0);
+  for(let i=0;i<ids.length;i++){
+    if(MODE==="cloud"){ try{ await apiDelete(ids[i]); }catch(e){} }
+    else { await delVideo(ids[i]); }
+    updateProg((i+1)/ids.length);
+  }
+  hideProg();
+  selected.clear(); clearUrlCache(); await refresh();
+  toast(`已删除 ${ids.length} 个`);
+};
+$("clearSel").onclick=()=>{ selected.clear(); renderGallery(); updateSelbar(); };
+
+/* ============ 保存到手机相册（优先系统分享，回退下载） ============ */
+async function saveVideo(id){
+  const rec=await getRec(id); if(!rec)return;
+  let blob;
+  if(MODE==="cloud"){ const r=await fetch(cloudVideoURL(id)); blob=await r.blob(); }
+  else blob=rec.blob;
+  const file=new File([blob], rec.name, {type:rec.type});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:rec.name}); return; }
+    catch(err){ if(err&&err.name==="AbortError")return; }
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=rec.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+  toast("已开始下载");
+}
+
+/* ============ 随机选取 + 不重复规则 ============ */
+async function randomSelect(n){
+  if(!videos.length){ toast("还没有视频"); return; }
+  n=Math.min(n, videos.length);
+  const noRepeat=await getMeta("noRepeat");
+  const last=await getMeta("lastSelection");
+  let pool=videos.map(v=>v.id);
+  if(noRepeat && last && last.date===todayStr() && last.ids && last.ids.length){
+    const prev=new Set(last.ids);
+    const avail=pool.filter(id=>!prev.has(id));
+    if(avail.length>=n){ pool=avail; }
+    else{ toast(`可避开上次的视频不足，已尽量选取（${avail.length} 个）`); pool=avail; n=avail.length; }
+  }
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  selected=new Set(pool.slice(0,n));
+  await setMeta("lastSelection",{ids:[...selected],date:todayStr()});
+  renderGallery(); updateSelbar();
+  toast(`已随机选中 ${selected.size} 个`);
+}
+$("rand30").onclick=()=>randomSelect(30);
+$("rand40").onclick=()=>randomSelect(40);
+$("rand50").onclick=()=>randomSelect(50);
+$("randN").onclick=()=>{
+  const v=prompt("输入要随机选取的数量：", Math.min(30,videos.length)||"30");
+  if(v==null)return;
+  const n=parseInt(v,10); if(isNaN(n)||n<1){toast("无效数量");return;}
+  randomSelect(n);
+};
+
+/* ============ 批量下载（仅总进度） ============ */
+$("dlSel").onclick=downloadSelected;
+async function downloadSelected(){
+  if(!selected.size){ toast("请先选择视频"); return; }
+  const ids=[...selected];
+  if(navigator.canShare && navigator.canShare({files:ids.map(()=>new File([new Blob()],"x"))})){
+    const files=[];
+    for(const id of ids){ const rec=await getRec(id); let blob;
+      if(MODE==="cloud"){ blob=await (await fetch(cloudVideoURL(id))).blob(); }
+      else blob=rec.blob;
+      files.push(new File([blob],rec.name,{type:rec.type})); }
+    try{ await navigator.share({files, title:`${ids.length} 个视频`}); return; }
+    catch(err){ if(err&&err.name==="AbortError")return; }
+  }
+  showProg("下载中",0);
+  for(let i=0;i<ids.length;i++){
+    await saveVideo(ids[i]);
+    updateProg((i+1)/ids.length);
+    await sleep(120);
+  }
+  hideProg();
+  toast(`已下载 ${ids.length} 个`);
+}
+
+/* ============ 进度遮罩（仅总进度） ============ */
+function showProg(title,p){ $("progTitle").textContent=title; $("prog").classList.add("show"); updateProg(p); }
+function updateProg(p){ const pct=Math.round((p||0)*100); $("progFill").style.width=pct+"%"; $("progPct").textContent=pct+"%"; }
+function hideProg(){ $("prog").classList.remove("show"); }
+
+/* ============ 设置面板 ============ */
+$("settingsBtn").onclick=()=>{ syncSettingsUI(); $("sheet").classList.add("show"); };
+function syncSettingsUI(){
+  $("cloudMode").checked=(MODE==="cloud");
+  $("cloudUrl").value=cloudBase||"";
+  $("noRepeat").checked=!!_noRepeatCache;
+}
+let _noRepeatCache=false;
+(async()=>{ _noRepeatCache=!!(await getMeta("noRepeat")); })();
+$("noRepeat").onchange=async e=>{ _noRepeatCache=e.target.checked; await setMeta("noRepeat",e.target.checked);
+  toast(e.target.checked?"已开启：同日随机不重复":"已关闭：可重复随机"); };
+$("cloudMode").onchange=async e=>{
+  MODE=e.target.checked?"cloud":"local";
+  await setMeta("mode",MODE);
+  $("modeTag").textContent=(MODE==="cloud")?"云端":"本地";
+  if(MODE==="cloud"){
+    const r=await testConnection();
+    if(r===true) toast("已切换到云端模式");
+    else toast("云端连接失败："+(typeof r==="string"?r:""));
+  }else{
+    toast("已切换到本地模式");
+  }
+  await refresh();
+};
+$("cloudUrl").onchange=async e=>{
+  cloudBase=e.target.value.trim();
+  await setMeta("cloudBase",cloudBase);
+  if(MODE==="cloud") await refresh();
+};
+$("testConn").onclick=async()=>{
+  const btn=$("testConn"); btn.textContent="测试中…"; btn.disabled=true;
+  const r=await testConnection();
+  btn.textContent="测试"; btn.disabled=false;
+  if(r===true) toast("连接成功 ✅");
+  else toast("连接失败："+r);
+};
+$("sheetCancel").onclick=()=>$("sheet").classList.remove("show");
+$("sheet").onclick=e=>{ if(e.target===$("sheet"))$("sheet").classList.remove("show"); };
+$("clearAll").onclick=async()=>{
+  if(!confirm("确定清空当前模式下的全部视频？此操作不可恢复。"))return;
+  showProg("清空中",0);
+  for(let i=0;i<videos.length;i++){
+    if(MODE==="cloud"){ try{ await apiDelete(videos[i].id); }catch(e){} }
+    else { await delVideo(videos[i].id); }
+    updateProg((i+1)/videos.length);
+  }
+  selected.clear(); clearUrlCache();
+  await setMeta("lastSelection",null);
+  hideProg(); $("sheet").classList.remove("show");
+  await refresh(); toast("已清空");
+};
+
+/* ============ PWA 安装 ============ */
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); deferredPrompt=e;
+  $("installBtn").style.display=""; $("installBtn2").style.display=""; });
+window.addEventListener("appinstalled",()=>{ deferredPrompt=null;
+  $("installBtn").style.display="none"; $("installBtn2").style.display="none"; toast("已安装到桌面"); });
+async function doInstall(){
+  if(!deferredPrompt){ toast("请通过浏览器菜单「添加到主屏幕/桌面」安装"); return; }
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice; deferredPrompt=null;
+}
+$("installBtn").onclick=doInstall;
+$("installBtn2").onclick=doInstall;
+
+/* ============ Service Worker（托管时生效） ============ */
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+}
+
+/* ============ 启动 ============ */
+(async()=>{
+  await openDB();
+  const savedMode=await getMeta("mode");
+  cloudBase=(await getMeta("cloudBase"))||"";
+  _noRepeatCache=!!(await getMeta("noRepeat"));
+  if(!savedMode && location.protocol!=="file:"){
+    // 首次通过 http(s) 打开：探测云端后端，可达则默认云端模式（任意设备同步）
+    const r=await testConnection();
+    MODE=(r===true)?"cloud":"local";
+    await setMeta("mode",MODE);
+  }else{
+    MODE=savedMode||"local";
+  }
+  $("modeTag").textContent=(MODE==="cloud")?"云端":"本地";
+  await refresh();
+})();
+</script>
+</body>
+</html>
