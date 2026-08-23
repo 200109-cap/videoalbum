@@ -1,0 +1,21 @@
+# Render 部署配置（视频相册云端后端）
+# 用法：Render 控制台 → New → Blueprint → 关联本仓库 → 一路确认即可。
+# 也可在 Dashboard 手动建 Web Service，rootDir 设为仓库根，Start Command 填 node server/server.js。
+services:
+  - type: web
+    name: video-album
+    runtime: node
+    region: oregon          # 也可改 singapore / frankfurt 等离你近的区域
+    rootDir: .              # 仓库根（含 index.html 与 server/）
+    buildCommand: "npm install"
+    startCommand: "node server/server.js"
+    healthCheckPath: "/api/health"
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATA_DIR       # 指向下面的持久磁盘挂载点，视频才会跨重启保留
+        value: "/var/data/video-album"
+    disks:
+      - name: video-album-data
+        mountPath: "/var/data/video-album"
+        sizeGB: 1           # 免费额度 1GB；不够可在 Render 控制台调大（按量计费）
