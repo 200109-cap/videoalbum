@@ -291,37 +291,45 @@ function setMeta(key,val){return new Promise((res,rej)=>{const r=tx("meta","read
 let MODE="local";                  // "local" | "cloud"
 let SB={ url:"", key:"", folder:"" }; // Supabase 配置
 const SB_BUCKET="videoalbum";
+let _sbToken=null, _sbTokenExp=0;  // 匿名会话令牌（publishable key 需要）
+
+/* 判断是否为新版 publishable/secret 密钥（非 JWT，必须换会话令牌） */
+function isNewKey(k){ return (k||"").startsWith("sb_publishable_")||(k||"").startsWith("sb_secret_"); }
 function sbBase(){ return (SB.url||"").trim().replace(/\/+$/,""); }
 function sbFolder(){ return (SB.folder||"vault").trim().replace(/^\/+|\/+$/g,""); }
-function sbHeaders(extra){ const h={"apikey":SB.key,"Authorization":"Bearer "+SB.key,"x-upsert":"true"}; return Object.assign(h, extra||{}); }
 function sbObjPath(suffix){ return encodeURIComponent(sbFolder())+"/"+suffix; }
-function sbPublicUrl(path){ return sbBase()+"/storage/v1/object/public/"+SB_BUCKET+"/"+sbObjPath(path); }
+function sbPublicUrl(suffix){ return sbBase()+"/storage/v1/object/public/"+SB_BUCKET+"/"+sbObjPath(suffix); }
+/* 真正的鉴权令牌：publishable key 用匿名会话令牌，传统 anon JWT 直接用自身 */
+function sbToken(){ return (_sbToken && Date.now()<_sbTokenExp) ? _sbToken : SB.key.trim(); }
 async function saveSBConfig(){ await setMeta("sb_url",SB.url); await setMeta("sb_key",SB.key); await setMeta("sb_folder",SB.folder); }
+/* 如需会话令牌（publishable key），做一次匿名登录换取 JWT */
+async function sbEnsureAuth(){
+  if(!isNewKey(SB.key)) return;                 // 传统 JWT 可直接当 Bearer
+  if(_sbToken && Date.now()<_sbTokenExp) return;// 令牌仍有效
+  const r=await fetch(sbBase()+"/auth/v1/signup",{
+    method:"POST",
+    headers:{"apikey":SB.key.trim(),"Content-Type":"application/json"},
+    body:JSON.stringify({data:{}, gotrue_meta_security:{captcha_token:null}})
+  });
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok || !j.session || !j.session.access_token)
+    throw new Error((j.error&&j.error.message)||"匿名登录失败：请在 Supabase 后台 Authentication → Providers 打开 Anonymous（匿名登录）");
+  _sbToken=j.session.access_token;
+  _sbTokenExp=Date.now()+((j.session.expires_in||3600)*1000)-60000;
+  await setMeta("sb_token",_sbToken); await setMeta("sb_token_exp",_sbTokenExp);
+}
 async function sbReadMeta(){
   try{ const r=await fetch(sbPublicUrl("meta.json"),{cache:"no-store"});
     if(!r.ok) return []; const arr=await r.json(); return Array.isArray(arr)?arr:[]; }
   catch(e){ return []; }
 }
 async function sbWriteMeta(arr){
+  await sbEnsureAuth();
   const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath("meta.json");
-  const r=await fetch(url,{method:"PUT",headers:sbHeaders({"Content-Type":"application/json"}),body:JSON.stringify(arr)});
+  const r=await fetch(url,{method:"PUT",
+    headers:{"apikey":SB.key.trim(),"Authorization":"Bearer "+sbToken(),"Content-Type":"application/json"},
+    body:JSON.stringify(arr)});
   if(!r.ok) throw new Error("保存元数据失败 "+r.status);
-}
-function sbUpload(path, blob, onProg){
-  return new Promise((resolve,reject)=>{
-    const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath(path);
-    const xhr=new XMLHttpRequest(); xhr.open("POST",url,true);
-    const h=sbHeaders({"Content-Type":blob.type||"application/octet-stream"});
-    for(const k in h) xhr.setRequestHeader(k,h[k]);
-    if(onProg) xhr.upload.onprogress=e=>{ if(e.lengthComputable) onProg(e.loaded/e.total); };
-    xhr.onload=()=>{ if(xhr.status>=200&&xhr.status<300) resolve(); else reject(new Error("上传失败 "+xhr.status)); };
-    xhr.onerror=()=>reject(new Error("网络错误"));
-    xhr.send(blob);
-  });
-}
-async function sbDelete(path){
-  const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath(path);
-  try{ await fetch(url,{method:"DELETE",headers:{"apikey":SB.key,"Authorization":"Bearer "+SB.key}}); }catch(e){}
 }
 function extOf(name){ const m=String(name||"").split(".").pop(); return (m&&m.match(/^[a-z0-9]{1,5}$/i))?m.toLowerCase():"mp4"; }
 async function apiList(){
@@ -330,14 +338,36 @@ async function apiList(){
 async function apiStorage(){
   const meta=await sbReadMeta(); let used=0; meta.forEach(m=>used+=(m.size||0)); return {usedBytes:used, count:meta.length};
 }
-async function apiPutVideo(rec,file,onProg){ await sbUpload(rec.id+"."+extOf(rec.name), file, onProg); }
-async function apiPutThumb(id,blob){ if(!blob) return; await sbUpload("thumbs/"+id+".jpg", blob); }
+async function apiPutVideo(rec,file,onProg){
+  await sbEnsureAuth();
+  const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath(rec.id+"."+extOf(rec.name));
+  await new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest(); xhr.open("POST",url,true);
+    xhr.setRequestHeader("apikey",SB.key.trim());
+    xhr.setRequestHeader("Authorization","Bearer "+sbToken());
+    xhr.setRequestHeader("Content-Type", file.type||"application/octet-stream");
+    xhr.setRequestHeader("x-upsert","true");
+    if(onProg) xhr.upload.onprogress=e=>{ if(e.lengthComputable) onProg(e.loaded/e.total); };
+    xhr.onload=()=>{ if(xhr.status>=200&&xhr.status<300) resolve(); else reject(new Error("上传失败 "+xhr.status)); };
+    xhr.onerror=()=>reject(new Error("网络错误"));
+    xhr.send(file);
+  });
+}
+async function apiPutThumb(id,blob){ if(!blob) return;
+  try{ await sbEnsureAuth();
+    const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath("thumbs/"+id+".jpg");
+    await fetch(url,{method:"POST",headers:{"apikey":SB.key.trim(),"Authorization":"Bearer "+sbToken(),"Content-Type":"image/jpeg","x-upsert":"true"},body:blob});
+  }catch(e){}
+}
 async function apiDelete(id){
   const meta=await sbReadMeta();
   const rec=meta.find(m=>m.id===id);
   await sbWriteMeta(meta.filter(m=>m.id!==id));
-  await sbDelete(id+"."+(rec?extOf(rec.name):"mp4"));
-  await sbDelete("thumbs/"+id+".jpg");
+  try{ await sbEnsureAuth();
+    const h={"apikey":SB.key.trim(),"Authorization":"Bearer "+sbToken()};
+    await fetch(sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath(id+"."+(rec?extOf(rec.name):"mp4")),{method:"DELETE",headers:h});
+    await fetch(sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath("thumbs/"+id+".jpg"),{method:"DELETE",headers:h});
+  }catch(e){}
 }
 function cloudVideoURL(id){ const rec=videos.find(v=>v.id===id); return sbPublicUrl(id+"."+(rec?extOf(rec.name):"mp4")); }
 function cloudThumbURL(id){ return sbPublicUrl("thumbs/"+id+".jpg"); }
@@ -346,7 +376,9 @@ async function testConnection(){
   if(!sbBase()||!SB.key||!sbFolder()) return "请在设置里填写 Supabase 地址、密钥、访问密码";
   if(location.protocol==="file:") return "请通过浏览器（http/https）打开，不能直接双击本文件";
   try{
-    const r=await fetch(sbBase()+"/storage/v1/bucket/"+SB_BUCKET,{headers:{"apikey":SB.key,"Authorization":"Bearer "+SB.key}});
+    await sbEnsureAuth();
+    const r=await fetch(sbBase()+"/storage/v1/bucket/"+SB_BUCKET,{
+      headers:{"apikey":SB.key.trim(),"Authorization":"Bearer "+sbToken()}});
     if(r.status===404) return "存储桶 "+SB_BUCKET+" 不存在（请先在 Supabase 建名为 videoalbum 的公开桶）";
     if(!r.ok) return "存储桶返回 HTTP "+r.status;
     return true;
@@ -749,6 +781,8 @@ if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   SB.url=(await getMeta("sb_url"))||"";
   SB.key=(await getMeta("sb_key"))||"";
   SB.folder=(await getMeta("sb_folder"))||"";
+  _sbToken=(await getMeta("sb_token"))||null;
+  _sbTokenExp=(await getMeta("sb_token_exp"))||0;
   _noRepeatCache=!!(await getMeta("noRepeat"));
   if(!savedMode && location.protocol!=="file:"){
     // 首次通过 http(s) 打开：若已配置 Supabase，则默认云端模式
