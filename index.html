@@ -95,7 +95,8 @@
     display:none; align-items:flex-end; justify-content:center;}
   .sheet.show{display:flex;}
   .sheet .panel{background:#fff; width:100%; max-width:560px; border-radius:16px 16px 0 0;
-    padding:8px 0 calc(env(safe-area-inset-bottom) + 8px); animation:up .25s ease;}
+    padding:8px 0 calc(env(safe-area-inset-bottom) + 8px); animation:up .25s ease;
+    max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch;}
   @keyframes up{from{transform:translateY(100%);}to{transform:translateY(0);}}
   .sheet .ph{text-align:center; font-size:13px; color:var(--sub); padding:10px;}
   .row{display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
