@@ -104,6 +104,9 @@
   .url-in{width:130px; font-size:14px; padding:7px 9px; border:1px solid var(--line);
     border-radius:8px; text-align:right; outline:none;}
   .url-in:focus{border-color:var(--blue);}
+  .url-full{width:100%; font-size:14px; padding:10px; border:1px solid var(--line);
+    border-radius:8px; outline:none; box-sizing:border-box; margin-top:8px; background:#fff;}
+  .url-full:focus{border-color:var(--blue);}
   .switch{position:relative; width:50px; height:30px; flex:0 0 auto;}
   .switch input{display:none;}
   .switch .tk{position:absolute; inset:0; background:#e9e9ea; border-radius:15px; transition:.2s;}
@@ -191,20 +194,32 @@
   <div class="panel">
     <div class="ph">设置</div>
     <div class="row">
-      <div>云端同步模式
-        <small>关闭=仅存此浏览器（可双击打开）；开启=上传到服务器，任意设备打开都有（需后端运行中）</small>
+      <div>云端同步模式（Supabase）
+        <small>关闭=仅存此手机/浏览器；开启=上传到 Supabase 免费云盘，换设备打开都在</small>
       </div>
       <label class="switch"><input type="checkbox" id="cloudMode"><span class="tk"></span></label>
     </div>
-    <div class="row">
-      <div>云端服务器地址
-        <small>同源部署留空；否则填完整地址，如 https://album.example.com</small>
+    <div class="row" style="flex-direction:column; align-items:stretch;">
+      <div>Supabase 地址
+        <small>如 https://abcdefg.supabase.co</small>
       </div>
-      <input class="url-in" id="cloudUrl" placeholder="同源留空" inputmode="url">
+      <input class="url-full" id="sbUrl" placeholder="https://xxxx.supabase.co" inputmode="url">
+    </div>
+    <div class="row" style="flex-direction:column; align-items:stretch;">
+      <div>访问密钥 anon key
+        <small>Supabase 项目里 API 设置中的 anon public（以 eyJ 开头）</small>
+      </div>
+      <input class="url-full" id="sbKey" placeholder="eyJ...">
+    </div>
+    <div class="row" style="flex-direction:column; align-items:stretch;">
+      <div>访问密码（文件夹名）
+        <small>自定义一个只有你知道的词，隔离你的视频，别人看不到</small>
+      </div>
+      <input class="url-full" id="sbFolder" placeholder="如 myvideo2024">
     </div>
     <div class="row">
       <div>测试连接
-        <small>开启云端前先点此，确认服务器可达（绿勾才正常）</small>
+        <small>填完上面三项后点此，确认配置正确（绿勾才正常）</small>
       </div>
       <button class="btn" id="testConn">测试</button>
     </div>
@@ -222,7 +237,7 @@
     </div>
     <div class="row">
       <div>关于存储
-        <small>本地模式：视频存于当前浏览器本地空间（IndexedDB）。云端模式：视频存于服务器，多端同步。</small>
+        <small>本地模式：视频存于当前浏览器本地空间（IndexedDB），删手机原片也不丢。云端模式：视频存于 Supabase 免费云盘，换设备打开都在。</small>
       </div>
     </div>
     <div class="row danger" id="clearAll">
@@ -271,38 +286,70 @@ function delVideo(id){return new Promise((res,rej)=>{const r=tx("videos","readwr
 function getMeta(key){return new Promise((res,rej)=>{const r=tx("meta","readonly").get(key);r.onsuccess=()=>res(r.result?r.result.value:undefined);r.onerror=()=>rej(r.error);});}
 function setMeta(key,val){return new Promise((res,rej)=>{const r=tx("meta","readwrite").put({key,value:val});r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
 
-/* ============ 云端模式状态 ============ */
-let MODE="local";      // "local" | "cloud"
-let cloudBase="";      // 云端服务器 base，空=同源
-function apiBase(){
-  let b=(cloudBase||"").trim().replace(/\/+$/,"");
-  return b;
+/* ============ 云端模式：Supabase Storage 后端 ============ */
+let MODE="local";                  // "local" | "cloud"
+let SB={ url:"", key:"", folder:"" }; // Supabase 配置
+const SB_BUCKET="videoalbum";
+function sbBase(){ return (SB.url||"").trim().replace(/\/+$/,""); }
+function sbFolder(){ return (SB.folder||"vault").trim().replace(/^\/+|\/+$/g,""); }
+function sbHeaders(extra){ const h={"apikey":SB.key,"Authorization":"Bearer "+SB.key,"x-upsert":"true"}; return Object.assign(h, extra||{}); }
+function sbObjPath(suffix){ return encodeURIComponent(sbFolder())+"/"+suffix; }
+function sbPublicUrl(path){ return sbBase()+"/storage/v1/object/public/"+SB_BUCKET+"/"+sbObjPath(path); }
+async function saveSBConfig(){ await setMeta("sb_url",SB.url); await setMeta("sb_key",SB.key); await setMeta("sb_folder",SB.folder); }
+async function sbReadMeta(){
+  try{ const r=await fetch(sbPublicUrl("meta.json"),{cache:"no-store"});
+    if(!r.ok) return []; const arr=await r.json(); return Array.isArray(arr)?arr:[]; }
+  catch(e){ return []; }
 }
-async function apiList(){ const r=await fetch(apiBase()+"/api/videos"); if(!r.ok)throw 0; return r.json(); }
-async function apiStorage(){ const r=await fetch(apiBase()+"/api/storage"); if(!r.ok)throw 0; return r.json(); }
-async function apiPutVideo(rec,file){
-  const qs=new URLSearchParams({name:rec.name,duration:String(rec.duration),type:rec.type,size:String(file.size)});
-  const r=await fetch(apiBase()+"/api/video/"+rec.id+"?"+qs.toString(),{method:"PUT",body:file});
-  if(!r.ok)throw 0;
+async function sbWriteMeta(arr){
+  const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath("meta.json");
+  const r=await fetch(url,{method:"PUT",headers:sbHeaders({"Content-Type":"application/json"}),body:JSON.stringify(arr)});
+  if(!r.ok) throw new Error("保存元数据失败 "+r.status);
 }
-async function apiPutThumb(id,blob){
-  const r=await fetch(apiBase()+"/api/thumb/"+id,{method:"PUT",body:blob});
-  if(!r.ok)throw 0;
+function sbUpload(path, blob, onProg){
+  return new Promise((resolve,reject)=>{
+    const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath(path);
+    const xhr=new XMLHttpRequest(); xhr.open("POST",url,true);
+    const h=sbHeaders({"Content-Type":blob.type||"application/octet-stream"});
+    for(const k in h) xhr.setRequestHeader(k,h[k]);
+    if(onProg) xhr.upload.onprogress=e=>{ if(e.lengthComputable) onProg(e.loaded/e.total); };
+    xhr.onload=()=>{ if(xhr.status>=200&&xhr.status<300) resolve(); else reject(new Error("上传失败 "+xhr.status)); };
+    xhr.onerror=()=>reject(new Error("网络错误"));
+    xhr.send(blob);
+  });
 }
+async function sbDelete(path){
+  const url=sbBase()+"/storage/v1/object/"+SB_BUCKET+"/"+sbObjPath(path);
+  try{ await fetch(url,{method:"DELETE",headers:{"apikey":SB.key,"Authorization":"Bearer "+SB.key}}); }catch(e){}
+}
+function extOf(name){ const m=String(name||"").split(".").pop(); return (m&&m.match(/^[a-z0-9]{1,5}$/i))?m.toLowerCase():"mp4"; }
+async function apiList(){
+  const meta=await sbReadMeta(); meta.sort((a,b)=>b.createdAt-a.createdAt); return meta;
+}
+async function apiStorage(){
+  const meta=await sbReadMeta(); let used=0; meta.forEach(m=>used+=(m.size||0)); return {usedBytes:used, count:meta.length};
+}
+async function apiPutVideo(rec,file,onProg){ await sbUpload(rec.id+"."+extOf(rec.name), file, onProg); }
+async function apiPutThumb(id,blob){ if(!blob) return; await sbUpload("thumbs/"+id+".jpg", blob); }
 async function apiDelete(id){
-  const r=await fetch(apiBase()+"/api/video/"+id,{method:"DELETE"});
-  if(!r.ok)throw 0;
+  const meta=await sbReadMeta();
+  const rec=meta.find(m=>m.id===id);
+  await sbWriteMeta(meta.filter(m=>m.id!==id));
+  await sbDelete(id+"."+(rec?extOf(rec.name):"mp4"));
+  await sbDelete("thumbs/"+id+".jpg");
 }
-function cloudVideoURL(id){ return apiBase()+"/api/video/"+id; }
-function cloudThumbURL(id){ return apiBase()+"/api/thumb/"+id; }
-/* 测试云端服务器是否可达，返回 true 或错误说明字符串 */
+function cloudVideoURL(id){ const rec=videos.find(v=>v.id===id); return sbPublicUrl(id+"."+(rec?extOf(rec.name):"mp4")); }
+function cloudThumbURL(id){ return sbPublicUrl("thumbs/"+id+".jpg"); }
+/* 测试 Supabase 配置是否正确 */
 async function testConnection(){
-  if(location.protocol==="file:") return "请通过浏览器访问 http://服务器地址:8080，不能直接双击本文件";
+  if(!sbBase()||!SB.key||!sbFolder()) return "请在设置里填写 Supabase 地址、密钥、访问密码";
+  if(location.protocol==="file:") return "请通过浏览器（http/https）打开，不能直接双击本文件";
   try{
-    const r=await fetch(apiBase()+"/api/health",{cache:"no-store"});
-    if(!r.ok) return "服务器返回 HTTP "+r.status;
+    const r=await fetch(sbBase()+"/storage/v1/bucket/"+SB_BUCKET,{headers:{"apikey":SB.key,"Authorization":"Bearer "+SB.key}});
+    if(r.status===404) return "存储桶 "+SB_BUCKET+" 不存在（请先在 Supabase 建名为 videoalbum 的公开桶）";
+    if(!r.ok) return "存储桶返回 HTTP "+r.status;
     return true;
-  }catch(e){ return (e&&e.message)||"无法连接（服务器未启动 / 地址错误 / 网络被拦截）"; }
+  }catch(e){ return (e&&e.message)||"无法连接（地址错误 / 网络被拦截）"; }
 }
 
 /* ============ 工具函数 ============ */
@@ -369,7 +416,7 @@ async function getRec(id){
 async function refresh(){
   if(MODE==="cloud"){
     if(location.protocol==="file:"){
-      toast("云端模式需通过浏览器访问服务器（如 http://电脑IP:8080），不能直接双击打开本文件");
+      toast("云端模式需通过浏览器（如你部署的网址）打开，不能直接双击本文件");
       videos=[];
     }else{
       try{ videos=await apiList(); }
@@ -460,7 +507,7 @@ async function ingest(files){
       if(isNaN(dur)||dur>MAX_DUR){ skip++; if(dur>MAX_DUR) toast(`已跳过：${f.name}（超过1分钟）`); updateProg((i+1)/files.length); continue; }
       const rec={ id:genId(), name:f.name||defName(), type:f.type||"video/mp4", size:f.size, duration:dur, createdAt:Date.now() };
       try{
-        await apiPutVideo(rec,f);
+        await apiPutVideo(rec,f, p=>updateProg((i+p)/files.length));
         const thumb=await makeThumb(f);
         if(thumb) await apiPutThumb(rec.id,thumb);
         ok++;
@@ -619,7 +666,9 @@ function hideProg(){ $("prog").classList.remove("show"); }
 $("settingsBtn").onclick=()=>{ syncSettingsUI(); $("sheet").classList.add("show"); };
 function syncSettingsUI(){
   $("cloudMode").checked=(MODE==="cloud");
-  $("cloudUrl").value=cloudBase||"";
+  $("sbUrl").value=SB.url||"";
+  $("sbKey").value=SB.key||"";
+  $("sbFolder").value=SB.folder||"";
   $("noRepeat").checked=!!_noRepeatCache;
 }
 let _noRepeatCache=false;
@@ -631,19 +680,25 @@ $("cloudMode").onchange=async e=>{
   await setMeta("mode",MODE);
   $("modeTag").textContent=(MODE==="cloud")?"云端":"本地";
   if(MODE==="cloud"){
+    SB.url=$("sbUrl").value.trim(); SB.key=$("sbKey").value.trim(); SB.folder=$("sbFolder").value.trim();
+    if(!SB.url||!SB.key||!SB.folder){ toast("请先在下方填写 Supabase 地址、密钥、密码"); MODE="local"; $("cloudMode").checked=false; $("modeTag").textContent="本地"; await setMeta("mode","local"); return; }
+    await saveSBConfig();
     const r=await testConnection();
     if(r===true) toast("已切换到云端模式");
-    else toast("云端连接失败："+(typeof r==="string"?r:""));
+    else { toast("云端连接失败："+(typeof r==="string"?r:"")); MODE="local"; $("cloudMode").checked=false; $("modeTag").textContent="本地"; await setMeta("mode","local"); }
   }else{
     toast("已切换到本地模式");
   }
   await refresh();
 };
-$("cloudUrl").onchange=async e=>{
-  cloudBase=e.target.value.trim();
-  await setMeta("cloudBase",cloudBase);
+async function onSBChange(){
+  SB.url=$("sbUrl").value.trim(); SB.key=$("sbKey").value.trim(); SB.folder=$("sbFolder").value.trim();
+  await saveSBConfig();
   if(MODE==="cloud") await refresh();
-};
+}
+$("sbUrl").onchange=onSBChange;
+$("sbKey").onchange=onSBChange;
+$("sbFolder").onchange=onSBChange;
 $("testConn").onclick=async()=>{
   const btn=$("testConn"); btn.textContent="测试中…"; btn.disabled=true;
   const r=await testConnection();
@@ -690,12 +745,13 @@ if("serviceWorker" in navigator && location.protocol.startsWith("http")){
 (async()=>{
   await openDB();
   const savedMode=await getMeta("mode");
-  cloudBase=(await getMeta("cloudBase"))||"";
+  SB.url=(await getMeta("sb_url"))||"";
+  SB.key=(await getMeta("sb_key"))||"";
+  SB.folder=(await getMeta("sb_folder"))||"";
   _noRepeatCache=!!(await getMeta("noRepeat"));
   if(!savedMode && location.protocol!=="file:"){
-    // 首次通过 http(s) 打开：探测云端后端，可达则默认云端模式（任意设备同步）
-    const r=await testConnection();
-    MODE=(r===true)?"cloud":"local";
+    // 首次通过 http(s) 打开：若已配置 Supabase，则默认云端模式
+    MODE=(SB.url&&SB.key&&SB.folder)?"cloud":"local";
     await setMeta("mode",MODE);
   }else{
     MODE=savedMode||"local";
