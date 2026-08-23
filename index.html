@@ -306,16 +306,24 @@ async function saveSBConfig(){ await setMeta("sb_url",SB.url); await setMeta("sb
 async function sbEnsureAuth(){
   if(!isNewKey(SB.key)) return;                 // 传统 JWT 可直接当 Bearer
   if(_sbToken && Date.now()<_sbTokenExp) return;// 令牌仍有效
-  const r=await fetch(sbBase()+"/auth/v1/signup",{
+  const r=await fetch(sbBase()+"/auth/v1/signin_anonymously",{
     method:"POST",
     headers:{"apikey":SB.key.trim(),"Content-Type":"application/json"},
-    body:JSON.stringify({data:{}, gotrue_meta_security:{captcha_token:null}})
+    body:"{}"
   });
   const j=await r.json().catch(()=>({}));
-  if(!r.ok || !j.session || !j.session.access_token)
-    throw new Error((j.error&&j.error.message)||"匿名登录失败：请在 Supabase 后台 Authentication → Providers 打开 Anonymous（匿名登录）");
-  _sbToken=j.session.access_token;
-  _sbTokenExp=Date.now()+((j.session.expires_in||3600)*1000)-60000;
+  if(!r.ok || !j.access_token){
+    const msg=(j.message)||(j.error&&j.error.message)||("HTTP "+r.status);
+    if(r.status===401 && (msg.includes("API key")||msg.includes("Invalid"))){
+      throw new Error("密钥无效/被截断：请回到 Supabase → Project Settings → API，点 Publishable key 右边的复制按钮，重新粘贴完整密钥（不要手打、不要截图认字）");
+    }
+    if(msg.includes("anonymous")||msg.includes("Anonymous")||msg.includes("disabled")){
+      throw new Error("匿名登录失败：请在 Supabase 后台 Authentication → Providers 打开 Anonymous（匿名登录）");
+    }
+    throw new Error("匿名登录失败："+msg);
+  }
+  _sbToken=j.access_token;
+  _sbTokenExp=Date.now()+((j.expires_in||3600)*1000)-60000;
   await setMeta("sb_token",_sbToken); await setMeta("sb_token_exp",_sbTokenExp);
 }
 async function sbReadMeta(){
